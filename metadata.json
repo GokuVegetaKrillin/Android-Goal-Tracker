@@ -1,0 +1,6 @@
+{
+  "name": "Goal Tracker",
+  "description": "Track arbitrary time-based goals, monitor progress and historical average success rates, run persistent background timers, and manage certificates and archives.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
