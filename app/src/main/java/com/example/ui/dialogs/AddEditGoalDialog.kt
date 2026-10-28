@@ -60,15 +60,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.data.GoalProgressCalculator
 import com.example.data.model.GoalEntity
 import com.example.data.model.RecurrenceType
+import com.example.ui.GoalCreationDefaults
 import com.example.ui.theme.GoalColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddEditGoalDialog(
     initialGoal: GoalEntity? = null,
+    defaults: GoalCreationDefaults? = null,
     onDismiss: () -> Unit,
     onSave: (
         name: String,
@@ -80,19 +81,35 @@ fun AddEditGoalDialog(
         category: String
     ) -> Unit
 ) {
+    // Name and description are strictly blank for new goals
     var name by remember { mutableStateOf(initialGoal?.name ?: "") }
     var description by remember { mutableStateOf(initialGoal?.description ?: "") }
-    var selectedColorHex by remember { mutableStateOf(initialGoal?.colorHex ?: "#8B5CF6") }
 
-    // Target duration in hours and minutes
-    val initialSeconds = initialGoal?.targetSeconds ?: 3600L
+    // Color: use initialGoal, or remembered defaults, or default purple
+    var selectedColorHex by remember {
+        mutableStateOf(initialGoal?.colorHex ?: defaults?.colorHex ?: "#8B5CF6")
+    }
+
+    // Target duration in hours and minutes: remembered from previous goal if creating new
+    val initialSeconds = initialGoal?.targetSeconds ?: defaults?.targetSeconds ?: 3600L
     var targetHoursText by remember { mutableStateOf((initialSeconds / 3600).toString()) }
     var targetMinutesText by remember { mutableStateOf(((initialSeconds % 3600) / 60).toString()) }
 
-    var recurrenceType by remember { mutableStateOf(initialGoal?.recurrenceType ?: RecurrenceType.DAILY) }
-    var customDaysInterval by remember { mutableIntStateOf(initialGoal?.recurrenceDaysInterval ?: 2) }
-    var customDaysText by remember { mutableStateOf((initialGoal?.recurrenceDaysInterval ?: 2).toString()) }
-    var category by remember { mutableStateOf(initialGoal?.category ?: "") }
+    // Recurrence: remembered from previous goal if creating new
+    var recurrenceType by remember {
+        mutableStateOf(initialGoal?.recurrenceType ?: defaults?.recurrenceType ?: RecurrenceType.DAILY)
+    }
+    var customDaysInterval by remember {
+        mutableIntStateOf(initialGoal?.recurrenceDaysInterval ?: defaults?.customDaysInterval ?: 2)
+    }
+    var customDaysText by remember {
+        mutableStateOf((initialGoal?.recurrenceDaysInterval ?: defaults?.customDaysInterval ?: 2).toString())
+    }
+
+    // Category: remembered from previous goal if creating new
+    var category by remember {
+        mutableStateOf(initialGoal?.category ?: defaults?.category ?: "")
+    }
 
     var nameError by remember { mutableStateOf(false) }
 
@@ -161,7 +178,7 @@ fun AddEditGoalDialog(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
-                // Name Row
+                // Name Row (always blank on new goal)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -194,7 +211,7 @@ fun AddEditGoalDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Description Row
+                // Description Row (always blank on new goal)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Top
@@ -278,7 +295,7 @@ fun AddEditGoalDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Goal Target Section
+                // Goal Target Section (uses remembered default target and recurrence)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),

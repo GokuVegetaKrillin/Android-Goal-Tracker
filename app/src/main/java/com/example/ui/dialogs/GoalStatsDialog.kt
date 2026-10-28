@@ -18,13 +18,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +47,7 @@ import com.example.data.GoalProgressCalculator
 import com.example.data.model.RecurrenceType
 import com.example.data.model.TimeLogEntity
 import com.example.ui.GoalWithProgress
+import com.example.util.ClipboardHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,8 +56,10 @@ import java.util.Locale
 fun GoalStatsDialog(
     goalWithProgress: GoalWithProgress,
     logs: List<TimeLogEntity>,
+    onViewSessions: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val goal = goalWithProgress.goal
     val progress = goalWithProgress.progress
 
@@ -77,7 +85,10 @@ fun GoalStatsDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(14.dp)
@@ -87,11 +98,31 @@ fun GoalStatsDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = goal.name,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1
                     )
                 }
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Copy Title & Header summary
+                    IconButton(
+                        onClick = {
+                            val headerText = "Goal: ${goal.name}\nType: ${goal.recurrenceType.displayName}\nStatus: ${if (goal.isCompleted) "Completed" else progress.formattedCurrentStatus}"
+                            ClipboardHelper.copyToClipboard(context, "Goal Info", headerText)
+                        },
+                        modifier = Modifier.size(32.dp).testTag("copy_goal_title_button")
+                    ) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = "Copy Goal Info",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
                 }
             }
         },
@@ -101,16 +132,53 @@ fun GoalStatsDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                // Description Section with Copy button
                 if (goal.description.isNotBlank()) {
-                    Text(
-                        text = goal.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Description",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = goal.description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    ClipboardHelper.copyToClipboard(context, "Description", goal.description)
+                                },
+                                modifier = Modifier.size(28.dp).testTag("copy_description_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = "Copy Description",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Current Period Progress Card
+                // Current Period Progress Card with Copy Button
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -127,11 +195,31 @@ fun GoalStatsDialog(
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                text = "${progress.progressPercentage}%",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = accentColor
-                            )
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${progress.progressPercentage}%",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = accentColor
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                IconButton(
+                                    onClick = {
+                                        val progressText = "Current Progress: ${progress.progressPercentage}%\n" +
+                                                "Logged: ${GoalProgressCalculator.formatDuration(progress.currentPeriodLoggedSeconds)} of ${GoalProgressCalculator.formatDuration(progress.targetSeconds)} target\n" +
+                                                "Status: ${progress.formattedCurrentStatus}"
+                                        ClipboardHelper.copyToClipboard(context, "Current Progress", progressText)
+                                    },
+                                    modifier = Modifier.size(28.dp).testTag("copy_progress_button")
+                                ) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = "Copy Progress",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -192,8 +280,8 @@ fun GoalStatsDialog(
                                     )
                                 }
 
-                                if (goal.isCompleted && goal.lockedAverageSuccessRate != null) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (goal.isCompleted && goal.lockedAverageSuccessRate != null) {
                                         Icon(
                                             Icons.Default.Lock,
                                             contentDescription = "Locked",
@@ -205,6 +293,23 @@ fun GoalStatsDialog(
                                             text = "Locked",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                    }
+
+                                    IconButton(
+                                        onClick = {
+                                            val avgText = "Average Success Rate: ${progress.averageSuccessPercentage ?: 0}%" +
+                                                    if (goal.isCompleted) " (Locked at completion)" else ""
+                                            ClipboardHelper.copyToClipboard(context, "Average Success Rate", avgText)
+                                        },
+                                        modifier = Modifier.size(28.dp).testTag("copy_average_success_button")
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ContentCopy,
+                                            contentDescription = "Copy Average Success Rate",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }
@@ -238,11 +343,32 @@ fun GoalStatsDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = "Goal Type: In Total",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Goal Type: In Total",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                IconButton(
+                                    onClick = {
+                                        val inTotalText = "Goal Type: In Total (no recurring deadline)\nTarget: ${GoalProgressCalculator.formatDuration(goal.targetSeconds)}\nLogged: ${GoalProgressCalculator.formatDuration(totalLifetimeLogged)} (${progress.progressPercentage}%)"
+                                        ClipboardHelper.copyToClipboard(context, "Goal Type Details", inTotalText)
+                                    },
+                                    modifier = Modifier.size(28.dp).testTag("copy_in_total_button")
+                                ) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = "Copy Goal Type",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "This goal has no recurring time limit deadline. Only total progress is tracked, and it automatically marks as completed when the target is reached.",
@@ -255,18 +381,47 @@ fun GoalStatsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Lifetime Summary
+                // Activity Details Section with Copy Button
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Activity Details",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Activity Details",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    val activityText = buildString {
+                                        appendLine("Activity Details: ${goal.name}")
+                                        appendLine("Total Logged: ${GoalProgressCalculator.formatDuration(totalLifetimeLogged)}")
+                                        appendLine("Total Sessions: ${logs.size} log entries")
+                                        appendLine("Created on: ${dateFormat.format(Date(goal.createdAt))}")
+                                        if (goal.isCompleted && goal.completedAt != null) {
+                                            appendLine("Completed on: ${dateFormat.format(Date(goal.completedAt))}")
+                                        }
+                                    }
+                                    ClipboardHelper.copyToClipboard(context, "Activity Details", activityText)
+                                },
+                                modifier = Modifier.size(28.dp).testTag("copy_activity_details_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = "Copy Activity Details",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -321,6 +476,23 @@ fun GoalStatsDialog(
                                         color = Color(0xFF10B981)
                                     )
                                 )
+                            }
+                        }
+
+                        // Button to view all recorded sessions
+                        if (onViewSessions != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = onViewSessions,
+                                modifier = Modifier.fillMaxWidth().testTag("view_sessions_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.History,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("View & Manage All ${logs.size} Sessions")
                             }
                         }
                     }

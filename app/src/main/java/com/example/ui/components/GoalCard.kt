@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
@@ -67,6 +68,7 @@ fun GoalCard(
     onToggleFavorite: () -> Unit,
     onManualAdd: () -> Unit,
     onViewStats: () -> Unit,
+    onViewSessions: () -> Unit,
     onViewNotes: () -> Unit,
     onEdit: () -> Unit,
     onReset: () -> Unit,
@@ -211,39 +213,55 @@ fun GoalCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Left group: Stats button, Manual time add button, Notes button
+                    // Left group: Stats button, Sessions button, Manual time add button, Notes button
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = onViewStats,
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .testTag("stats_button_${goal.id}")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.BarChart,
                                 contentDescription = "Statistics",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onViewSessions,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .testTag("sessions_button_${goal.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = "View Sessions",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(19.dp)
                             )
                         }
 
                         IconButton(
                             onClick = onManualAdd,
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .testTag("manual_time_button_${goal.id}")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Add Time Log",
+                                imageVector = Icons.Default.AddCircleOutline,
+                                contentDescription = "Add Time Manually",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(19.dp)
                             )
                         }
 
                         IconButton(
                             onClick = onViewNotes,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier
+                                .size(34.dp)
+                                .testTag("notes_button_${goal.id}")
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Notes,
@@ -342,6 +360,15 @@ fun GoalCard(
                                     onClick = {
                                         menuExpanded = false
                                         onEdit()
+                                    }
+                                )
+
+                                DropdownMenuItem(
+                                    text = { Text("View Sessions") },
+                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onViewSessions()
                                     }
                                 )
 

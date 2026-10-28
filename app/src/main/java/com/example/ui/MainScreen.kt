@@ -4,6 +4,11 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,22 +20,33 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,7 +54,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -59,6 +78,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.GoalSortOrder
 import com.example.data.StartScreen
 import com.example.data.model.GoalEntity
 import com.example.ui.components.ActiveTimerBar
@@ -66,6 +86,7 @@ import com.example.ui.components.GoalCard
 import com.example.ui.dialogs.AddEditGoalDialog
 import com.example.ui.dialogs.CertificateDialog
 import com.example.ui.dialogs.GoalNotesDialog
+import com.example.ui.dialogs.GoalSessionsDialog
 import com.example.ui.dialogs.GoalStatsDialog
 import com.example.ui.dialogs.ManualTimeDialog
 import com.example.ui.dialogs.SettingsDialog
@@ -88,6 +109,10 @@ fun MainScreen(viewModel: GoalViewModel) {
     val favoriteGoals by viewModel.favoriteGoalsWithProgress.collectAsState()
     val completedGoals by viewModel.completedGoalsWithProgress.collectAsState()
     val archivedGoals by viewModel.archivedGoalsWithProgress.collectAsState()
+
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val sortOrder by viewModel.sortOrder.collectAsState()
+    val isHeaderExpanded by viewModel.isHeaderExpanded.collectAsState()
 
     // Determine initial tab based on user preference
     var selectedTabIndex by remember {
@@ -113,6 +138,7 @@ fun MainScreen(viewModel: GoalViewModel) {
     var goalForManualTime by remember { mutableStateOf<GoalEntity?>(null) }
     var goalForStats by remember { mutableStateOf<GoalWithProgress?>(null) }
     var goalForNotes by remember { mutableStateOf<GoalEntity?>(null) }
+    var goalForSessions by remember { mutableStateOf<GoalEntity?>(null) }
     var goalForCertificate by remember { mutableStateOf<GoalEntity?>(null) }
     var goalToDelete by remember { mutableStateOf<GoalEntity?>(null) }
     var goalToReset by remember { mutableStateOf<GoalEntity?>(null) }
@@ -203,91 +229,252 @@ fun MainScreen(viewModel: GoalViewModel) {
             }
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            val currentList = when (selectedTabIndex) {
-                0 -> activeGoals
-                1 -> favoriteGoals
-                2 -> completedGoals
-                3 -> archivedGoals
-                else -> activeGoals
-            }
-
-            if (currentList.isEmpty()) {
-                val emptyMessage = when (selectedTabIndex) {
-                    0 -> "No goals yet.\nTap the + button to create your first goal!"
-                    1 -> "No favorite goals.\nTap the star icon on any goal to pin it here."
-                    2 -> "No completed goals yet.\nKeep going to reach your milestones and claim certificates!"
-                    3 -> "No archived goals.\nCompleted or inactive goals can be archived from their options menu."
-                    else -> "No goals available."
-                }
-
-                Box(
+            // Collapsible Header Section for Search and Sort Tools
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = when (selectedTabIndex) {
-                                1 -> Icons.Default.Star
-                                2 -> Icons.Default.EmojiEvents
-                                3 -> Icons.Default.Archive
-                                else -> Icons.Default.ListAlt
-                            },
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = emptyMessage,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
+                    // Header Bar with Toggle button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "Search: \"$searchQuery\"" else "Search & Sort",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "• ${sortOrder.title}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { viewModel.setHeaderExpanded(!isHeaderExpanded) },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("toggle_header_tools_button")
+                        ) {
+                            Icon(
+                                imageVector = if (isHeaderExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isHeaderExpanded) "Collapse Tools" else "Expand Tools",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Collapsible Content
+                    AnimatedVisibility(
+                        visible = isHeaderExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp, bottom = 8.dp)
+                        ) {
+                            // Search bar
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { viewModel.setSearchQuery(it) },
+                                placeholder = { Text("Search title, description, notes, memos...") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = "Search",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(
+                                            onClick = { viewModel.setSearchQuery("") },
+                                            modifier = Modifier.testTag("clear_search_button")
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Clear search",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("search_bar_input")
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Sort options row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sort,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Sort:",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(GoalSortOrder.values()) { order ->
+                                        val isSelected = sortOrder == order
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { viewModel.setSortOrder(order) },
+                                            label = { Text(order.title, fontSize = 12.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            ),
+                                            modifier = Modifier.testTag("sort_chip_${order.name.lowercase()}")
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(currentList, key = { it.goal.id }) { item ->
-                        GoalCard(
-                            goalWithProgress = item,
-                            timerState = timerState,
-                            onStartTimer = { viewModel.startTimer(item.goal) },
-                            onPauseTimer = { viewModel.pauseTimer() },
-                            onResumeTimer = { viewModel.resumeTimer() },
-                            onToggleFavorite = { viewModel.toggleFavorite(item.goal) },
-                            onManualAdd = { goalForManualTime = item.goal },
-                            onViewStats = { goalForStats = item },
-                            onViewNotes = { goalForNotes = item.goal },
-                            onEdit = { goalToEdit = item.goal },
-                            onReset = { goalToReset = item.goal },
-                            onArchive = { viewModel.archiveGoal(item.goal) },
-                            onUnarchive = { viewModel.unarchiveGoal(item.goal) },
-                            onMarkComplete = { viewModel.markGoalComplete(item.goal) },
-                            onMarkIncomplete = { viewModel.markGoalIncomplete(item.goal) },
-                            onDelete = { goalToDelete = item.goal },
-                            onCreateCertificate = { goalForCertificate = item.goal }
-                        )
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                val currentList = when (selectedTabIndex) {
+                    0 -> activeGoals
+                    1 -> favoriteGoals
+                    2 -> completedGoals
+                    3 -> archivedGoals
+                    else -> activeGoals
+                }
+
+                if (currentList.isEmpty()) {
+                    val emptyMessage = if (searchQuery.isNotBlank()) {
+                        "No goals match \"$searchQuery\" in this section."
+                    } else {
+                        when (selectedTabIndex) {
+                            0 -> "No goals yet.\nTap the + button to create your first goal!"
+                            1 -> "No favorite goals.\nTap the star icon on any goal to pin it here."
+                            2 -> "No completed goals yet.\nKeep going to reach your milestones and claim certificates!"
+                            3 -> "No archived goals.\nCompleted or inactive goals can be archived from their options menu."
+                            else -> "No goals available."
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = if (searchQuery.isNotBlank()) {
+                                    Icons.Default.Search
+                                } else {
+                                    when (selectedTabIndex) {
+                                        1 -> Icons.Default.Star
+                                        2 -> Icons.Default.EmojiEvents
+                                        3 -> Icons.Default.Archive
+                                        else -> Icons.Default.ListAlt
+                                    }
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = emptyMessage,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+
+                            if (searchQuery.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    Text("Clear Search")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 84.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(currentList, key = { it.goal.id }) { item ->
+                            GoalCard(
+                                goalWithProgress = item,
+                                timerState = timerState,
+                                onStartTimer = { viewModel.startTimer(item.goal) },
+                                onPauseTimer = { viewModel.pauseTimer() },
+                                onResumeTimer = { viewModel.resumeTimer() },
+                                onToggleFavorite = { viewModel.toggleFavorite(item.goal) },
+                                onManualAdd = { goalForManualTime = item.goal },
+                                onViewStats = { goalForStats = item },
+                                onViewSessions = { goalForSessions = item.goal },
+                                onViewNotes = { goalForNotes = item.goal },
+                                onEdit = { goalToEdit = item.goal },
+                                onReset = { goalToReset = item.goal },
+                                onArchive = { viewModel.archiveGoal(item.goal) },
+                                onUnarchive = { viewModel.unarchiveGoal(item.goal) },
+                                onMarkComplete = { viewModel.markGoalComplete(item.goal) },
+                                onMarkIncomplete = { viewModel.markGoalIncomplete(item.goal) },
+                                onDelete = { goalToDelete = item.goal },
+                                onCreateCertificate = { goalForCertificate = item.goal }
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    // Add Goal Dialog
+    // Add Goal Dialog: load remembered defaults from last created goal
     if (showAddGoalDialog) {
+        val defaults = remember { viewModel.getGoalCreationDefaults() }
         AddEditGoalDialog(
             initialGoal = null,
+            defaults = defaults,
             onDismiss = { showAddGoalDialog = false },
             onSave = { name, desc, colorHex, targetSec, recurrence, interval, category ->
                 viewModel.createGoal(name, desc, colorHex, targetSec, recurrence, interval, category)
@@ -300,6 +487,7 @@ fun MainScreen(viewModel: GoalViewModel) {
     goalToEdit?.let { goal ->
         AddEditGoalDialog(
             initialGoal = goal,
+            defaults = null,
             onDismiss = { goalToEdit = null },
             onSave = { name, desc, colorHex, targetSec, recurrence, interval, category ->
                 viewModel.updateGoal(
@@ -335,7 +523,27 @@ fun MainScreen(viewModel: GoalViewModel) {
         GoalStatsDialog(
             goalWithProgress = goalWithProgress,
             logs = allLogs.filter { it.goalId == goalWithProgress.goal.id },
+            onViewSessions = {
+                goalForSessions = goalWithProgress.goal
+                goalForStats = null
+            },
             onDismiss = { goalForStats = null }
+        )
+    }
+
+    // Goal Sessions Dialog
+    goalForSessions?.let { goal ->
+        val sessions = allLogs.filter { it.goalId == goal.id }
+        GoalSessionsDialog(
+            goal = goal,
+            sessions = sessions,
+            onUpdateSession = { updatedSession ->
+                viewModel.updateTimeLog(updatedSession)
+            },
+            onDeleteSession = { logId, goalId ->
+                viewModel.deleteTimeLog(logId, goalId)
+            },
+            onDismiss = { goalForSessions = null }
         )
     }
 
@@ -346,6 +554,7 @@ fun MainScreen(viewModel: GoalViewModel) {
             goal = goal,
             notes = notes,
             onAddNote = { content -> viewModel.addNote(goal.id, content) },
+            onUpdateNote = { note -> viewModel.updateNote(note) },
             onDeleteNote = { noteId -> viewModel.deleteNote(noteId) },
             onDismiss = { goalForNotes = null }
         )

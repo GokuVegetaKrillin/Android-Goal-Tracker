@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.example.data.model.TimeLogEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -23,6 +24,9 @@ interface TimeLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: TimeLogEntity): Long
+
+    @Update
+    suspend fun updateLog(log: TimeLogEntity)
 
     @Query("DELETE FROM time_logs WHERE goalId = :goalId")
     suspend fun deleteLogsForGoal(goalId: Long)

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.example.data.model.GoalNoteEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -16,10 +17,16 @@ interface GoalNoteDao {
     suspend fun getNotesForGoalList(goalId: Long): List<GoalNoteEntity>
 
     @Query("SELECT * FROM goal_notes ORDER BY timestamp DESC")
+    fun getAllNotes(): Flow<List<GoalNoteEntity>>
+
+    @Query("SELECT * FROM goal_notes ORDER BY timestamp DESC")
     suspend fun getAllNotesList(): List<GoalNoteEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNote(note: GoalNoteEntity): Long
+
+    @Update
+    suspend fun updateNote(note: GoalNoteEntity)
 
     @Query("DELETE FROM goal_notes WHERE id = :id")
     suspend fun deleteNoteById(id: Long)

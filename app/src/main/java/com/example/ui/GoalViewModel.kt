@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.GoalTrackerApplication
 import com.example.data.GoalProgressCalculator
 import com.example.data.GoalProgressInfo
+import com.example.data.GoalSortOrder
 import com.example.data.PreferenceManager
 import com.example.data.StartScreen
 import com.example.data.model.GoalEntity
@@ -29,6 +30,14 @@ data class GoalWithProgress(
     val progress: GoalProgressInfo
 )
 
+data class GoalCreationDefaults(
+    val targetSeconds: Long,
+    val recurrenceType: RecurrenceType,
+    val customDaysInterval: Int,
+    val colorHex: String,
+    val category: String
+)
+
 class GoalViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = (application as GoalTrackerApplication).repository
@@ -37,60 +46,158 @@ class GoalViewModel(application: Application) : AndroidViewModel(application) {
     private val _startScreen = MutableStateFlow(prefManager.getStartScreen())
     val startScreen: StateFlow<StartScreen> = _startScreen.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _sortOrder = MutableStateFlow(prefManager.getSortOrder())
+    val sortOrder: StateFlow<GoalSortOrder> = _sortOrder.asStateFlow()
+
+    private val _isHeaderExpanded = MutableStateFlow(prefManager.isToolsHeaderExpanded())
+    val isHeaderExpanded: StateFlow<Boolean> = _isHeaderExpanded.asStateFlow()
+
     val timerState: StateFlow<TimerState> = TimerStateManager.timerState
 
     val allLogs: StateFlow<List<TimeLogEntity>> = repository.allLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val activeGoalsWithProgress: StateFlow<List<GoalWithProgress>> = combine(
-        repository.activeGoals,
-        allLogs
-    ) { goals, logs ->
-        goals.map { goal ->
+    val allNotes: StateFlow<List<GoalNoteEntity>> = repository.allNotes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val filterSortFlow = combine(_searchQuery, _sortOrder) { q, sort ->
+        Pair(q, sort)
+    }
+
+    private fun processGoals(
+        goals: List<GoalEntity>,
+        logs: List<TimeLogEntity>,
+        notes: List<GoalNoteEntity>,
+        query: String,
+        sort: GoalSortOrder
+    ): List<GoalWithProgress> {
+        val trimmedQuery = query.trim().lowercase()
+
+        val list = goals.mapNotNull { goal ->
             val gLogs = logs.filter { it.goalId == goal.id }
-            val progress = GoalProgressCalculator.calculateProgress(goal, gLogs)
-            if (progress.isAutoCompletable && !goal.isCompleted) {
-                // Auto-complete IN_TOTAL goal
-                viewModelScope.launch(Dispatchers.IO) {
-                    repository.markGoalComplete(goal)
+            val gNotes = notes.filter { it.goalId == goal.id }
+
+            // Search filter: title, description, category, notes, and log memos
+            val matches = if (trimmedQuery.isEmpty()) {
+                true
+            } else {
+                goal.name.lowercase().contains(trimmedQuery) ||
+                        goal.description.lowercase().contains(trimmedQuery) ||
+                        goal.category.lowercase().contains(trimmedQuery) ||
+                        gNotes.any { it.content.lowercase().contains(trimmedQuery) } ||
+                        gLogs.any { it.note.lowercase().contains(trimmedQuery) }
+            }
+
+            if (!matches) {
+                null
+            } else {
+                val progress = GoalProgressCalculator.calculateProgress(goal, gLogs)
+                if (progress.isAutoCompletable && !goal.isCompleted) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        repository.markGoalComplete(goal)
+                    }
+                }
+                GoalWithProgress(goal, progress)
+            }
+        }
+
+        // Apply sorting
+        return when (sort) {
+            GoalSortOrder.RECENTLY_ACTIVE -> {
+                list.sortedByDescending { item ->
+                    val latestLogTime = logs.filter { it.goalId == item.goal.id }.maxOfOrNull { it.timestamp } ?: 0L
+                    maxOf(item.goal.createdAt, latestLogTime)
                 }
             }
-            GoalWithProgress(goal, progress)
+            GoalSortOrder.ALPHABETICAL_ASC -> {
+                list.sortedBy { it.goal.name.lowercase() }
+            }
+            GoalSortOrder.ALPHABETICAL_DESC -> {
+                list.sortedByDescending { it.goal.name.lowercase() }
+            }
+            GoalSortOrder.PROGRESS_DESC -> {
+                list.sortedByDescending { it.progress.progressRatio }
+            }
+            GoalSortOrder.PROGRESS_ASC -> {
+                list.sortedBy { it.progress.progressRatio }
+            }
+            GoalSortOrder.TARGET_TIME_DESC -> {
+                list.sortedByDescending { it.goal.targetSeconds }
+            }
+            GoalSortOrder.TARGET_TIME_ASC -> {
+                list.sortedBy { it.goal.targetSeconds }
+            }
+            GoalSortOrder.NEWEST -> {
+                list.sortedByDescending { it.goal.createdAt }
+            }
+            GoalSortOrder.OLDEST -> {
+                list.sortedBy { it.goal.createdAt }
+            }
         }
+    }
+
+    val activeGoalsWithProgress: StateFlow<List<GoalWithProgress>> = combine(
+        repository.activeGoals,
+        allLogs,
+        allNotes,
+        filterSortFlow
+    ) { goals, logs, notes, (query, sort) ->
+        processGoals(goals, logs, notes, query, sort)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val favoriteGoalsWithProgress: StateFlow<List<GoalWithProgress>> = combine(
         repository.favoriteGoals,
-        allLogs
-    ) { goals, logs ->
-        goals.map { goal ->
-            val gLogs = logs.filter { it.goalId == goal.id }
-            val progress = GoalProgressCalculator.calculateProgress(goal, gLogs)
-            GoalWithProgress(goal, progress)
-        }
+        allLogs,
+        allNotes,
+        filterSortFlow
+    ) { goals, logs, notes, (query, sort) ->
+        processGoals(goals, logs, notes, query, sort)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val completedGoalsWithProgress: StateFlow<List<GoalWithProgress>> = combine(
         repository.completedGoals,
-        allLogs
-    ) { goals, logs ->
-        goals.map { goal ->
-            val gLogs = logs.filter { it.goalId == goal.id }
-            val progress = GoalProgressCalculator.calculateProgress(goal, gLogs)
-            GoalWithProgress(goal, progress)
-        }
+        allLogs,
+        allNotes,
+        filterSortFlow
+    ) { goals, logs, notes, (query, sort) ->
+        processGoals(goals, logs, notes, query, sort)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val archivedGoalsWithProgress: StateFlow<List<GoalWithProgress>> = combine(
         repository.archivedGoals,
-        allLogs
-    ) { goals, logs ->
-        goals.map { goal ->
-            val gLogs = logs.filter { it.goalId == goal.id }
-            val progress = GoalProgressCalculator.calculateProgress(goal, gLogs)
-            GoalWithProgress(goal, progress)
-        }
+        allLogs,
+        allNotes,
+        filterSortFlow
+    ) { goals, logs, notes, (query, sort) ->
+        processGoals(goals, logs, notes, query, sort)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun setSortOrder(order: GoalSortOrder) {
+        prefManager.setSortOrder(order)
+        _sortOrder.value = order
+    }
+
+    fun setHeaderExpanded(expanded: Boolean) {
+        prefManager.setToolsHeaderExpanded(expanded)
+        _isHeaderExpanded.value = expanded
+    }
+
+    fun getGoalCreationDefaults(): GoalCreationDefaults {
+        return GoalCreationDefaults(
+            targetSeconds = prefManager.getLastTargetSeconds(),
+            recurrenceType = prefManager.getLastRecurrenceType(),
+            customDaysInterval = prefManager.getLastCustomDaysInterval(),
+            colorHex = prefManager.getLastColorHex(),
+            category = prefManager.getLastCategory()
+        )
+    }
 
     fun createGoal(
         name: String,
@@ -102,6 +209,15 @@ class GoalViewModel(application: Application) : AndroidViewModel(application) {
         category: String = ""
     ) {
         viewModelScope.launch {
+            // Save defaults for future new goals
+            prefManager.saveGoalCreationDefaults(
+                targetSeconds = targetSeconds,
+                recurrenceType = recurrenceType,
+                customDaysInterval = recurrenceDaysInterval,
+                colorHex = colorHex,
+                category = category
+            )
+
             repository.insertGoal(
                 GoalEntity(
                     name = name,
@@ -187,9 +303,27 @@ class GoalViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateTimeLog(log: TimeLogEntity) {
+        viewModelScope.launch {
+            repository.updateLog(log)
+        }
+    }
+
+    fun deleteTimeLog(logId: Long, goalId: Long) {
+        viewModelScope.launch {
+            repository.deleteLogById(logId, goalId)
+        }
+    }
+
     fun addNote(goalId: Long, content: String) {
         viewModelScope.launch {
             repository.insertNote(goalId, content)
+        }
+    }
+
+    fun updateNote(note: GoalNoteEntity) {
+        viewModelScope.launch {
+            repository.updateNote(note)
         }
     }
 

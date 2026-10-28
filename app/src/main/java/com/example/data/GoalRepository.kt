@@ -24,6 +24,7 @@ class GoalRepository(
     val archivedGoals: Flow<List<GoalEntity>> = goalDao.getArchivedGoals()
     val allGoals: Flow<List<GoalEntity>> = goalDao.getAllGoals()
     val allLogs: Flow<List<TimeLogEntity>> = timeLogDao.getAllLogs()
+    val allNotes: Flow<List<GoalNoteEntity>> = goalNoteDao.getAllNotes()
 
     fun getGoalById(id: Long): Flow<GoalEntity?> = goalDao.getGoalById(id)
 
@@ -147,6 +148,34 @@ class GoalRepository(
         logId
     }
 
+    suspend fun updateLog(log: TimeLogEntity) = withContext(Dispatchers.IO) {
+        timeLogDao.updateLog(log)
+        // Check auto-completion for IN_TOTAL
+        val goal = goalDao.getGoalByIdDirect(log.goalId)
+        if (goal != null && goal.recurrenceType == RecurrenceType.IN_TOTAL) {
+            val allLogs = timeLogDao.getLogsForGoalList(log.goalId)
+            val totalLogged = allLogs.sumOf { it.durationSeconds }
+            if (totalLogged >= goal.targetSeconds && !goal.isCompleted) {
+                goalDao.updateGoal(goal.copy(isCompleted = true, completedAt = System.currentTimeMillis()))
+            } else if (totalLogged < goal.targetSeconds && goal.isCompleted) {
+                goalDao.updateGoal(goal.copy(isCompleted = false, completedAt = null))
+            }
+        }
+    }
+
+    suspend fun deleteLogById(logId: Long, goalId: Long) = withContext(Dispatchers.IO) {
+        timeLogDao.deleteLogById(logId)
+        // Check auto-completion for IN_TOTAL if logged time dropped below target
+        val goal = goalDao.getGoalByIdDirect(goalId)
+        if (goal != null && goal.recurrenceType == RecurrenceType.IN_TOTAL) {
+            val allLogs = timeLogDao.getLogsForGoalList(goalId)
+            val totalLogged = allLogs.sumOf { it.durationSeconds }
+            if (totalLogged < goal.targetSeconds && goal.isCompleted) {
+                goalDao.updateGoal(goal.copy(isCompleted = false, completedAt = null))
+            }
+        }
+    }
+
     suspend fun insertNote(goalId: Long, content: String): Long = withContext(Dispatchers.IO) {
         goalNoteDao.insertNote(
             GoalNoteEntity(
@@ -155,6 +184,10 @@ class GoalRepository(
                 timestamp = System.currentTimeMillis()
             )
         )
+    }
+
+    suspend fun updateNote(note: GoalNoteEntity) = withContext(Dispatchers.IO) {
+        goalNoteDao.updateNote(note)
     }
 
     suspend fun deleteNoteById(id: Long) = withContext(Dispatchers.IO) {
